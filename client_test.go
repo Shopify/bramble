@@ -88,6 +88,7 @@ func TestGraphqlClient(t *testing.T) {
 
 	t.Run("compressed response", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "gzip", r.Header.Get("Accept-Encoding"))
 			w.Header().Set("Content-Encoding", "gzip")
 			gz := gzip.NewWriter(w)
 			defer gz.Close()
@@ -107,7 +108,7 @@ func TestGraphqlClient(t *testing.T) {
 			}
 		}
 
-		err := c.Request(context.Background(), srv.URL, &Request{Headers: map[string][]string{"Accept-Encoding": {"gzip"}}}, &res)
+		err := c.Request(context.Background(), srv.URL, &Request{}, &res)
 		assert.NoError(t, err)
 		assert.Equal(t, "value", res.Root.Test)
 	})
