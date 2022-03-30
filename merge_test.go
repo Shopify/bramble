@@ -884,6 +884,68 @@ func TestMergeRemovesCustomDirectives(t *testing.T) {
 	fixture.CheckSuccess(t)
 }
 
+func TestMergeAuthorizationDirective(t *testing.T) {
+	fixture := MergeTestFixture{
+		Input1: `
+			interface Node { id: ID! }
+			directive @boundary on OBJECT
+
+			directive @authorization on FIELD_DEFINITION | OBJECT
+
+            type Query {
+				name: String! @deprecated
+            }
+
+			type MyBoundaryType implements Node @boundary @authorization(scopes: ["read_myboundarytype"]) {
+				id: ID!
+				firstName: String
+			}
+
+			type ServiceAType @authorization(scopes: ["read_serviceatype"]) {
+				field: String
+			}
+		`,
+		Input2: `
+			interface Node { id: ID! }
+			directive @boundary on OBJECT
+
+			directive @authorization on FIELD_DEFINITION | OBJECT
+
+			type MyBoundaryType implements Node @boundary @authorization(scopes: ["read_myboundarytype"]) {
+				id: ID!
+				lastName: String
+			}
+
+			type ServiceBType {
+				field: String @authorization(scopes: ["read_serviceb_field"])
+			}
+		`,
+		Expected: `
+			directive @boundary on OBJECT
+			directive @authorization on FIELD_DEFINITION | OBJECT
+
+            type Query {
+				name: String! @deprecated
+            }
+
+			type MyBoundaryType @boundary @authorization(scopes: ["read_myboundarytype"]) {
+				id: ID!
+				lastName: String
+				firstName: String
+			}
+
+			type ServiceAType @authorization(scopes: ["read_serviceatype"]) {
+				field: String
+			}
+
+			type ServiceBType {
+				field: String @authorization(scopes: ["read_serviceb_field"])
+			}
+		`,
+	}
+	fixture.CheckSuccess(t)
+}
+
 func TestMergeWithAlternateId(t *testing.T) {
 	IdFieldName = "gid"
 	fixture := MergeTestFixture{

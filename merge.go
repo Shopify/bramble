@@ -185,7 +185,7 @@ func mergeTypes(a, b map[string]*ast.Definition) (map[string]*ast.Definition, er
 			continue
 		}
 
-		mergedBoundaryObject, err := mergeBoundaryObjects(a, b, &newVB, va)
+		mergedBoundaryObject, err := mergeBoundaryObject(a, b, &newVB, va)
 		if err != nil {
 			return nil, err
 		}
@@ -284,17 +284,22 @@ func mergeNamespaceObjects(aTypes, bTypes map[string]*ast.Definition, a, b *ast.
 	}, nil
 }
 
-func mergeBoundaryObjects(aTypes, bTypes map[string]*ast.Definition, a, b *ast.Definition) (*ast.Definition, error) {
+func mergeBoundaryObject(aTypes, bTypes map[string]*ast.Definition, a, b *ast.Definition) (*ast.Definition, error) {
+	directives, err := mergeBoundaryDirectives(a.Directives, b.Directives, a.Name)
+	if err != nil {
+		return nil, err
+	}
+
 	result := &ast.Definition{
 		Kind:        ast.Object,
 		Description: mergeDescriptions(a, b),
 		Name:        a.Name,
-		Directives:  a.Directives.ForNames(boundaryDirectiveName),
+		Directives:  directives,
 		Interfaces:  append(a.Interfaces, b.Interfaces...),
 		Fields:      nil,
 	}
 
-	mergedFields, err := mergeBoundaryObjectFields(aTypes, bTypes, a, b)
+	mergedFields, err := mergeBoundaryObjectFields(a, b)
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +308,45 @@ func mergeBoundaryObjects(aTypes, bTypes map[string]*ast.Definition, a, b *ast.D
 	return result, nil
 }
 
-func mergeBoundaryObjectFields(aTypes, bTypes map[string]*ast.Definition, a, b *ast.Definition) (ast.FieldList, error) {
+func mergeBoundaryDirectives(aDirectives, bDirectives ast.DirectiveList, typeName string) (ast.DirectiveList, error) {
+	sameDirectives := true
+	if len(aDirectives) != len(bDirectives) {
+		sameDirectives = false
+	} else {
+		for i, v := range aDirectives {
+			if !sameDirective(v, bDirectives[i]) {
+				sameDirectives = false
+			}
+		}
+	}
+
+	if !sameDirectives {
+		return nil, fmt.Errorf("Multiple definitions of %s with differing directives", typeName)
+	}
+	return aDirectives, nil
+}
+
+func sameDirective(a, b *ast.Directive) bool {
+	if a.Name != b.Name {
+		return false
+	}
+	if len(a.Arguments) != len(b.Arguments) {
+		return false
+	}
+	for i, v := range a.Arguments {
+		if v.Name != b.Arguments[i].Name {
+			return false
+		}
+
+		// HACK to not have to recurse over potentially nested values
+		if v.Value.Raw != b.Arguments[i].Value.Raw {
+			return false
+		}
+	}
+	return true
+}
+
+func mergeBoundaryObjectFields(a, b *ast.Definition) (ast.FieldList, error) {
 	var result ast.FieldList
 	for _, f := range a.Fields {
 		if isQueryType(a) && (isNodeField(f) || isServiceField(f)) {
@@ -387,7 +430,7 @@ func cleanFields(fields ast.FieldList) ast.FieldList {
 
 func allowedDirective(name string) bool {
 	switch name {
-	case boundaryDirectiveName, namespaceDirectiveName, "skip", "include", "deprecated":
+	case boundaryDirectiveName, namespaceDirectiveName, "authorization", "skip", "include", "deprecated":
 		return true
 	default:
 		return false
